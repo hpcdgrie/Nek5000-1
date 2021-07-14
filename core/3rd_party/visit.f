@@ -19,14 +19,14 @@ c---------------------------------------------------------------------
 c     // local variables
       integer err
 c     // SIMSTATE common block
-      integer runflag, endflag
-      common /SIMSTATE/ runflag, endflag
+      integer runflag, endflag, runfreq
+      common /SIMSTATE/ runflag, endflag, runfreq
       save /SIMSTATE/
 c     // PARALLEL state common block
       integer par_rank, par_size
       common /PARALLEL/ par_rank, par_size
       save /PARALLEL/
-
+      runfreq = 1
 #ifdef VISIT_STOP
 c     // The sim will wait for VisIt to connect after first step.
       runflag = 0
@@ -152,6 +152,8 @@ c visit_check
 c---------------------------------------------------------------------
       subroutine visit_check()
       implicit none
+      include 'SIZE'
+      include 'TSTEP'
       include "mpif.h"
       include "visitfortransimV2interface.inc"
 c     // functions
@@ -159,12 +161,16 @@ c     // functions
 c     // local variables
       integer visitstate, result, blocking, ierr
 c     // SIMSTATE common block
-      integer runflag, endflag
-      common /SIMSTATE/ runflag, endflag
+      integer runflag, endflag, runfreq
+      common /SIMSTATE/ runflag, endflag, runfreq
 c     // PARALLEL state common block
       integer par_rank, par_size
       common /PARALLEL/ par_rank, par_size
 
+c      // check if we have to process the current time step
+      if(mod(ISTEP, runfreq).ne.0) then
+            goto 1234
+          endif
 c     // If at the end of sim, lets not force an update.
       if(endflag.eq.0) then
 c        // Check if we are connected to VisIt
@@ -283,8 +289,8 @@ c---------------------------------------------------------------------
       integer     lcmd, largs
       include "visitfortransimV2interface.inc"
 c     // SIMSTATE common block
-      integer runflag, endflag
-      common /SIMSTATE/ runflag, endflag
+      integer runflag, endflag, runfreq, stat
+      common /SIMSTATE/ runflag, endflag, runfreq
 
 c     // Handle the commands that we define in visitgetmetadata.
       if(visitstrcmp(cmd, lcmd, "stop", 4).eq.0) then
@@ -300,6 +306,14 @@ c     // Handle the commands that we define in visitgetmetadata.
               endflag = 2
               runflag = 2
           endif
+      elseif(visitstrcmp(cmd, lcmd, "freq", 6).eq.0) then
+            read(args(0:largs),*,iostat=stat)  runfreq
+            if(stat.eq.0) then
+                  print *, 'only sending every ', runfreq, 'th timestep'
+            else
+                  print *, 'failed to convert frequency to int'
+                  runfreq = 1
+            endif
       endif
       end
 
@@ -538,6 +552,11 @@ c       // Add simulation commands
         if(err.eq.VISIT_OKAY) then
            err = visitmdcmdsetname(cmd, "finish", 6)
            err = visitmdsimaddgenericcommand(md, cmd)
+        endif
+        err = visitmdcmdalloc(cmd)
+        if(err.eq.VISIT_OKAY) then
+           err = visitmdcmdsetname(cmd, "freq", 4)
+           err = visitmdsimaddcustomcommand(md, cmd)
         endif
       endif
       visitgetmetadata = md
