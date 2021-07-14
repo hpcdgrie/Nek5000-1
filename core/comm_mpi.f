@@ -19,10 +19,12 @@ c-----------------------------------------------------------------------
       logical mpi_is_initialized
 
       integer*8 ntags
+      integer mpi_prov
 
       call mpi_initialized(mpi_is_initialized, ierr)
-      if (.not.mpi_is_initialized) call mpi_init(ierr)
-
+      if (.not.mpi_is_initialized) then
+            call mpi_init_thread(MPI_THREAD_MULTIPLE, mpi_prov, ierr)
+      endif
       call mpi_comm_dup(comm,newcommg,ierr)
       newcomm = newcommg
       nekcomm = newcommg 
